@@ -1,0 +1,185 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Notes Hub Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />  <!-- Firebase -->  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #e2e8f0;
+    }
+
+    header {
+      padding: 15px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      background: rgba(0,0,0,0.3);
+      backdrop-filter: blur(10px);
+    }
+
+    .container { padding: 20px; }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px 0;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      background: rgba(255,255,255,0.1);
+      color: white;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background: linear-gradient(45deg, #3b82f6, #06b6d4);
+      color: white;
+      font-weight: bold;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+
+    .tabs button {
+      margin-right: 10px;
+    }
+
+    .note {
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.07);
+      margin-top: 10px;
+    }
+
+    a { color: #38bdf8; text-decoration: none; }
+  </style></head>
+<body><header>🚀 Notes Hub Pro</header><div class="container">  <div class="card">
+    <button onclick="login()">Login</button>
+    <button onclick="logout()">Logout</button>
+    <p id="user"></p>
+  </div>  <div class="tabs">
+    <button onclick="show('upload')">Upload</button>
+    <button onclick="show('view')">Explore</button>
+  </div>  <div id="upload" class="card">
+    <h3>Upload Notes</h3>
+    <input id="title" placeholder="Title">
+    <input id="subject" placeholder="Subject"><select id="category">
+  <option>Class 9</option><option>Class 10</option>
+  <option>Class 11</option><option>Class 12</option>
+  <option>CUET</option><option>NDA</option>
+  <option>NEET</option><option>JEE</option>
+</select>
+
+<select id="type">
+  <option>Notes</option>
+  <option>PYQ</option>
+</select>
+
+<input type="file" id="file">
+<button onclick="uploadNote()">Upload</button>
+
+  </div>  <div id="view" class="card" style="display:none">
+    <h3>Explore Notes</h3>
+    <input id="search" placeholder="Search..." oninput="loadNotes()">
+    <div id="notes"></div>
+  </div></div><script>
+const firebaseConfig = {
+  apiKey: "AIzaSyA98XTZ_GL_40fTZjyiKXmW9IXO8jSDHUs",
+  authDomain: "learningaf.firebaseapp.com",
+  projectId: "learningaf",
+  storageBucket: "learningaf.appspot.com",
+  messagingSenderId: "508400293276",
+  appId: "1:508400293276:web:46da6d1f95f3f86d8ea459"
+};
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+const storage = firebase.storage();
+const auth = firebase.auth();
+const provider = new firebase.auth.GoogleAuthProvider();
+
+let user = null;
+
+function login(){ auth.signInWithPopup(provider).then(r=>{user=r.user; userUI();}); }
+function logout(){ auth.signOut(); user=null; userUI(); }
+function userUI(){ document.getElementById('user').innerText = user?"👤 "+user.displayName:""; }
+
+function show(id){
+  upload.style.display='none'; view.style.display='none';
+  document.getElementById(id).style.display='block';
+}
+
+async function uploadNote(){
+  if(!user) return alert("Login first");
+
+  const file = fileEl.files[0];
+  if(!file) return alert("Select file");
+
+  const ref = storage.ref("notes/"+Date.now()+file.name);
+  await ref.put(file);
+  const url = await ref.getDownloadURL();
+
+  await db.collection("notes").add({
+    title:titleEl.value,
+    subject:subjectEl.value,
+    category:categoryEl.value,
+    type:typeEl.value,
+    url,
+    user:user.displayName,
+    likes:0,
+    comments:[]
+  });
+
+  alert("Uploaded 🚀");
+  loadNotes();
+}
+
+async function loadNotes(){
+  const s = search.value.toLowerCase();
+  notes.innerHTML="";
+
+  const snap = await db.collection("notes").get();
+
+  snap.forEach(doc=>{
+    const n = doc.data();
+    if(!n.title.toLowerCase().includes(s)) return;
+
+    notes.innerHTML += `
+      <div class='note'>
+        <h4>${n.title}</h4>
+        <p>${n.subject} | ${n.category}</p>
+        <p>👤 ${n.user}</p>
+        <p>❤️ ${n.likes}</p>
+        <a href='${n.url}' target='_blank'>View</a> |
+        <a href='${n.url}' download>Download</a>
+        <br><br>
+        <button onclick="like('${doc.id}',${n.likes})">Like</button>
+      </div>`;
+  });
+}
+
+async function like(id,l){
+  await db.collection("notes").doc(id).update({likes:l+1});
+  loadNotes();
+}
+
+loadNotes();
+</script></body>
+                                       </html>
